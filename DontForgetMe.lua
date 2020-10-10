@@ -76,6 +76,8 @@ function SummonRandomPet()
 
     if (petId) then
         speciesID, customName, level, xp, maxXp, displayID, isFavorite, name, icon, petType, creatureID, sourceText, description, isWild, canBattle, tradable, unique, obtainable = C_PetJournal.GetPetInfoByPetID(petId);
+        print(description);
+        print(sourceText);
         
         if (customName) then
             displayName = customName;
