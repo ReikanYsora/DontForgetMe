@@ -1,0 +1,9 @@
+﻿## Interface: 80205
+## Title: DontForgetMe - |cff267dcf[Reikan]|r
+## Notes: Summon a random pet at each loading
+## Notes-frFR: Invoque un pet aléatoire à chaque chargement
+## Author: Reikan
+## Version: 1.0.0
+Localization.lua
+DontForgetMe.lua
+DontForgetMe.xml
