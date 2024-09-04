@@ -1,5 +1,5 @@
-## Interface: 110002
-## Title: DontForgetMe
+## Interface: 110000, 110002
+## Title: DontForgetMe (1.0.0)
 ## Notes: Don't leave your companions behind!
 ## Author: Reikan
 ## Version: 1.0.0
