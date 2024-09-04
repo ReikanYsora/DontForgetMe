@@ -1,145 +1,89 @@
-﻿-- Author      : Reikan
--- Create Date : 10/09/2020 3:19:28 PM
--- Update Date : 10/10/2020 5:57:12 PM
+local DFM_Title
+local DFM_Author
+local DFM_Version
 
-local ADDON_NAME, namespace = ...
-local L = namespace.L
-local ADDON_VERSION = "1.0.0";
-local ADDON_NAME = "Don't forget me !";
-SLASH_DFM1 = "/dfm";
+-- Init saved settings
+if DFM_Settings == nil then
+    DFM_Settings = {}
+end
 
+if DFM_Settings.DFM_FavoriteOnly == nil then
+    DFM_Settings.DFM_FavoriteOnly = true
+end
+
+if DFM_Settings.DFM_SyncPets == nil then
+    DFM_Settings.DFM_SyncPets = true
+end
+
+--- METHOD : On Load - Display Addon name and version
 function DFM_OnLoad()
-    DFMFrame:RegisterEvent("PLAYER_CONTROL_GAINED");
-    DFMFrame:RegisterEvent("PLAYER_UNGHOST");
-    DFMFrame:RegisterEvent("UNIT_EXITING_VEHICLE");
-    DFMFrame:RegisterEvent("PLAYER_LOSES_VEHICLE_DATA");
-    DFMFrame:RegisterEvent("PLAYER_ALIVE");
+    DFM_Title = C_AddOns.GetAddOnMetadata("DontForgetMe", "Title")
+    DFM_Author = C_AddOns.GetAddOnMetadata("DontForgetMe", "Author")
+    DFM_Version = C_AddOns.GetAddOnMetadata("DontForgetMe", "Version")
+    DEFAULT_CHAT_FRAME:AddMessage("|cff0066d1".. DFM_Title .."|r |cffffff00-|r |cffeb7800"..DFM_Version.."|r |cffffff00 by "..DFM_Author.."|r")
+
+    -- Register addon message prefix
+    C_ChatInfo.RegisterAddonMessagePrefix("DFM_PetSync")
+
+   -- Create option panel
+    local panel = CreateFrame("Frame", nil, InterfaceOptionsFramePanelContainer)
+    panel.name = "Don't Forget Me"
+    local category = Settings.RegisterCanvasLayoutCategory(panel, panel.name)
+    Settings.RegisterAddOnCategory(category)
+
+    local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("TOPLEFT", 16, -16)
+    title:SetText(DFM_Title .. " - " .. DFM_Version)
+
+    local author = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    author:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+    author:SetText("by " .. DFM_Author)
     
-    DFMFrame:SetScript("OnEvent", DFM_OnEvent);
-    DFM_AddInterfaceOptionPanel();
-    PrintMessage(L["LOADED"]);
+    -- Favorite only check option
+    local checkboxFavoriteOnly = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
+    checkboxFavoriteOnly:SetPoint("TOPLEFT", author, "BOTTOMLEFT", 0, -16)
+    checkboxFavoriteOnly.text:SetText("Summon favorite pets only")
+    checkboxFavoriteOnly:SetChecked(DFM_Settings.DFM_FavoriteOnly)
+
+    checkboxFavoriteOnly:SetScript("OnClick", function(self)
+        DFM_Settings.DFM_FavoriteOnly = self:GetChecked()
+    end)
 end
 
-function DFM_AddInterfaceOptionPanel()
-    MyAddon = {};
-    frame = CreateFrame("Frame", "DFM_OptionPanel", UIParent);
-    MyAddon.panel = frame;
-    MyAddon.panel.name = ADDON_NAME;
-    InterfaceOptions_AddCategory(MyAddon.panel);
-end
+-- METHOD : Check if a pet is summon, if not, summon a random favorite pet
+local function DFM_EnsurePet()
+    local DFM_petGUID = C_PetJournal.GetSummonedPetGUID()
 
-function PrintMessage(msg)
-      DEFAULT_CHAT_FRAME:AddMessage("|cff267dcf["..ADDON_NAME.."]: |r"..msg)
-end
-
-function DFMHandler()    
-    coroutine.wrap(SummonRandomPet)(0);
-end
-
-function DFM_OnEvent(self, event, ...)      
-    if (event == "PLAYER_CONTROL_GAINED") then 
-        coroutine.wrap(SummonRandomPet)(0);
-    end
-     
-    if (event == "PLAYER_UNGHOST") then  
-        coroutine.wrap(SummonRandomPet)(0);
-    end     
-     
-    if (event == "UNIT_EXITING_VEHICLE") then   
-        coroutine.wrap(SummonRandomPet)(0);
-    end
-
-    if (event == "PLAYER_LOSES_VEHICLE_DATA") then  
-        coroutine.wrap(SummonRandomPet)(0);
-    end
-
-    if (event == "PLAYER_ALIVE") then     
-        coroutine.wrap(SummonRandomPet)(0);
-    end     
-end
-
-local function delay(tick)
-    local th = coroutine.running()
-    C_Timer.After(tick, function() coroutine.resume(th) end)
-    coroutine.yield()
-end
-
-function SummonRandomPet()
-	--numPets, count = C_PetJournal.GetNumPets(false);
-    --if (count == 0) then
-    --    return;
-    --end
-
-    C_PetJournal.SummonRandomPet(false);
-    delay(0.5);
-    petId = C_PetJournal.GetSummonedPetGUID();
-
-    if (petId) then
-        speciesID, customName, level, xp, maxXp, displayID, isFavorite, name, icon, petType, creatureID, sourceText, description, isWild, canBattle, tradable, unique, obtainable = C_PetJournal.GetPetInfoByPetID(petId);
-        print(description);
-        print(sourceText);
-        
-        if (customName) then
-            displayName = customName;
-        else
-            displayName = name;
-        end
-
-        displayText = L["ASKS"]..displayName..L["TO_COME"];
-
-        if (petType == 1) then
-            displayText = displayText..L["HUMANOID"];
-        end
-
-        if (petType == 2) then
-            displayText = displayText..L["DRAGONKIN"];
-        end
-        
-        if (petType == 3) then
-            displayText = displayText..L["FLYING"];
-        end
-
-        if (petType == 4) then
-            displayText = displayText..L["UNDEAD"];
-        end
-
-        if (petType == 5) then
-            displayText = displayText..L["CRITTER"];
-        end
-
-        if (petType == 6) then
-            displayText = displayText..L["MAGIC"];
-        end
-
-        if (petType == 7) then
-            displayText = displayText..L["ELEMENTAL"];
-        end
-
-        if (petType == 8) then
-            displayText = displayText..L["BEAST"];
-        end
-
-        if (petType == 9) then
-            displayText = displayText..L["AQUATIC"] ;
-        end
-
-        if (petType == 10) then
-            displayText = displayText..L["MECHANICAL"];
-        end
-
-        if (isFavorite) then
-            gender = UnitSex("player");
-            if (gender == 3) then
-                displayText = displayText..displayName..L["FAVORITE_1"]..L["GENDER_F"]..L["FAVORITE_2"];
-            else
-                displayText = displayText..displayName..L["FAVORITE_1"]..L["GENDER_M"]..L["FAVORITE_2"];
-            end
-        end
-
-        if (displayText) then
-            SendChatMessage(displayText ,"EMOTE");
-        end
+    if not DFM_petGUID then
+        C_PetJournal.SummonRandomPet(DFM_Settings.DFM_FavoriteOnly)
     end
 end
 
-SlashCmdList["DFM"] = DFMHandler
+-- Create frame for events
+local f = CreateFrame("Frame")
+
+-- Register events
+f:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+f:RegisterEvent("PLAYER_REGEN_ENABLED")
+f:RegisterEvent("PLAYER_LOGIN")
+f:RegisterEvent("PLAYER_ENTERING_WORLD")
+f:RegisterEvent("PLAYER_MOUNT_DISPLAY_CHANGED")
+f:RegisterEvent("ADDON_LOADED")
+
+-- Manage events
+f:SetScript("OnEvent", function(self, event, ...)
+    local arg1, arg2, arg3, arg4 = ...
+
+    if event == "PLAYER_LOGIN" then
+        DFM_OnLoad()
+    elseif event == "ZONE_CHANGED_NEW_AREA" or event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_REGEN_ENABLED" then
+        DFM_EnsurePet()
+    elseif event == "PLAYER_MOUNT_DISPLAY_CHANGED" then
+        local isMounted = IsMounted()
+        if not isMounted then
+            DFM_EnsurePet()
+        end        
+    elseif event == "CHAT_MSG_ADDON" then
+        DFM_OnAddonMessage(arg1, arg2, arg3, arg4)
+    end
+end)

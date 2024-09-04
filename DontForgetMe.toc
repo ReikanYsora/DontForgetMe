@@ -1,9 +1,9 @@
-﻿## Interface: 90001
-## Title: DontForgetMe - |cff267dcf[Reikan - Xedra]|r
-## Notes: Summon a random pet at each loading
-## Notes-frFR: Invoque un pet aléatoire à chaque chargement
-## Author: Reikan - Xedra
-## Version: 1.1.1
-Localization.lua
+## Interface: 110002
+## Title: DontForgetMe
+## Notes: Don't leave your companions behind!
+## Author: Reikan
+## Version: 1.0.0
+## IconTexture: 2341435
+## SavedVariables: DFM_Settings
 DontForgetMe.lua
 DontForgetMe.xml
