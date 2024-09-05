@@ -1,8 +1,8 @@
 ## Interface: 110000, 110002
-## Title: DontForgetMe (1.0.0)
+## Title: DontForgetMe!
 ## Notes: Don't leave your companions behind!
 ## Author: Reikan
-## Version: 1.0.0
+## Version: 1.0.1
 ## IconTexture: 2341435
 ## SavedVariables: DFM_Settings
 DontForgetMe.lua
