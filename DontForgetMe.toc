@@ -2,8 +2,9 @@
 ## Title: DontForgetMe!
 ## Notes: Don't leave your companions behind!
 ## Author: |cff915b25Reikan / Naxxramas|r - |cff4dd2ffReikan#2302|r
-## Version: 1.0.2
+## Version: 1.1.0
 ## IconTexture: 2341435
 ## SavedVariables: DFM_Settings
+Localizations.lua
 DontForgetMe.lua
 DontForgetMe.xml
