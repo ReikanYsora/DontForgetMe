@@ -3,22 +3,19 @@ local DFM_Title
 local DFM_Author
 local DFM_Version
 local DFM_Prefix = "DFM_SYNC"
-local DFM_WaitingPetRequest         -- Pet name in waiting list
-local DFM_SummoningInProgress
+local DFM_WaitingPetRequest         -- Pet species ID in queue
+local DFM_SummoningInProgress       -- State for summoning (API request must be take 2 sec to return the good summoning value)
 
 -- States
 local isStealth
 local isAFK
 local isFalling
+local isCombatLockdown
 local isPetSummoned
 local isFlying
 local isOnTaxi
 local isDeadOrGhost
 local isCasting
-local isInCinematic
-local isAtAuctionHouse
-local isAtMerchant
-local isMailing
 
 -- Lists for favorite, non-favorite pets and owned pets
 local DFM_FavoritePets = {}
@@ -26,16 +23,11 @@ local DFM_NonFavoritePets = {}
 local DFM_OwnedPets = {}
 
 -- Initialize saved settings table
-DFM_Settings = DFM_Settings or {}
-
--- Ensure older versions of DFM_Settings are compatible with the new structure
-if type(DFM_Settings.DFM_FavoriteOnly) ~= "boolean" then
-    DFM_Settings.DFM_FavoriteOnly = true
-end
-
-if type(DFM_Settings.DFM_SyncPet) ~= "boolean" then
-    DFM_Settings.DFM_SyncPet = true
-end
+DFM_Settings = DFM_Settings or
+{
+    DFM_Setting_FavoriteOnly = true,
+    DFM_Setting_SyncPet = true
+}
 
 --- METHOD : On Load - Display Addon name and version
 function DFM_OnLoad()
@@ -73,18 +65,18 @@ function DFM_OnLoad()
     local checkboxFavoriteOnly = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
     checkboxFavoriteOnly:SetPoint("TOPLEFT", author, "BOTTOMLEFT", 0, -10)
     checkboxFavoriteOnly.text:SetText(DFM_Locale["SETTINGS_FAVORITE_ONLY"])
-    checkboxFavoriteOnly:SetChecked(DFM_Settings.DFM_FavoriteOnly)
+    checkboxFavoriteOnly:SetChecked(DFM_Settings.DFM_Setting_FavoriteOnly)
     checkboxFavoriteOnly:SetScript("OnClick", function(self)
-        DFM_Settings.DFM_FavoriteOnly = self:GetChecked()
+        DFM_Settings.DFM_Setting_FavoriteOnly = self:GetChecked()
     end)
     
     -- Sync over GUILD, PARTY or RAID check option
     local checkboxSyncPet = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
     checkboxSyncPet:SetPoint("TOPLEFT", checkboxFavoriteOnly, "BOTTOMLEFT", 0, 0)
     checkboxSyncPet.text:SetText(DFM_Locale["SETTINGS_ENABLE_SYNC"])
-    checkboxSyncPet:SetChecked(DFM_Settings.DFM_SyncPet)
+    checkboxSyncPet:SetChecked(DFM_Settings.DFM_Setting_SyncPet)
     checkboxSyncPet:SetScript("OnClick", function(self)
-        DFM_Settings.DFM_SyncPet = self:GetChecked()
+        DFM_Settings.DFM_Setting_SyncPet = self:GetChecked()
     end)
 end
 
@@ -105,7 +97,7 @@ local function DFM_UpdatePetLists()
     wipe(DFM_NonFavoritePets)
     wipe(DFM_OwnedPets)
 
-    local numPets, numOwned = C_PetJournal.GetNumPets(false)
+    local numPets, numOwned = C_PetJournal.GetNumPets()
 
     for i = 1, numPets do
         petID, speciesID, owned, _, _, favorite, _, petName = C_PetJournal.GetPetInfoByIndex(i)
@@ -122,6 +114,10 @@ local function DFM_UpdatePetLists()
             table.insert(DFM_OwnedPets, speciesID)
         end
     end
+
+    print("DFM_FavoritePets : "..#DFM_FavoritePets)
+    print("DFM_NonFavoritePets : "..#DFM_NonFavoritePets)
+    print("DFM_OwnedPets : "..#DFM_OwnedPets)
 end
 
 -- METHOD : Return pet name from speciesID
@@ -136,7 +132,7 @@ local function GetPetNameFromSpeciesID(speciesID)
         end        
     end
 
-    return nil
+    return DFM_Locale["UNKNOWN_NAME"]
 end
 
 -- METHOD : Get petGUID from speciesID
@@ -166,7 +162,7 @@ local function DFM_SummonPet()
     -- Select appropriate list based on settings
     local tempPetList
 
-    if (DFM_Settings.DFM_FavoriteOnly) then
+    if (DFM_Settings.DFM_Setting_FavoriteOnly) then
         tempPetList = DFM_FavoritePets
     else
         tempPetList = DFM_NonFavoritePets
@@ -195,8 +191,13 @@ local function DFM_SummonPet()
              -- Convert speciesID to petGUID
             local currentSpeciesId, petGUID = GetPetGUIDBySpeciesID(currentPetGUID)
 
+            if (not currentSpeciesId) then
+                return
+            end
+
             -- The request and current pet the same
             if (currentSpeciesId == DFM_WaitingPetRequest) then           
+                DFM_WaitingPetRequest = nil
                 return
             end              
         end      
@@ -211,9 +212,12 @@ local function DFM_SummonPet()
     end
 
     local petGUID = GetPetGUIDBySpeciesID(speciesIdToSummon)
-    C_PetJournal.SummonPetByGUID(petGUID)
-    DFM_SummoningInProgress = true
-    C_Timer.After(2, OnSummonedEnded)
+
+    if (petGUID) then
+        C_PetJournal.SummonPetByGUID(petGUID)
+        DFM_SummoningInProgress = true
+        C_Timer.After(2, OnSummonedEnded)
+    end
 end
 
 -- METHOD : Revoke pet
@@ -228,7 +232,7 @@ end
 
 -- METHOD : Check states and set flag on DFM_SummonRequired only if necessary
 local function DFM_CheckStates()
-    local isCombatLockdown = InCombatLockdown()                     -- If combatlock mode is enabled (prevent error for trying to summon action in combat mode)
+    isCombatLockdown = InCombatLockdown()               -- If combatlock mode is enabled (prevent error for trying to summon action in combat mode)
 
     if (isCombatLockdown) then
         return
@@ -244,7 +248,7 @@ local function DFM_CheckStates()
     isCasting, _, _, _, _ = UnitChannelInfo("player")         -- If player is casting
 
     -- If player is not falling, is not in stealth, is not locked by combat and is not on AFK mode
-    if ((not isFalling) and (not isStealth) and (not isAFK) and (not isCombatLockdown) and (not isPetSummoned or DFM_WaitingPetRequest) and (not isFlying) and (not isOnTaxi) and (not isDeadOrGhost) and (not isCasting) and (not isInCinematic) and (not isAtMerchant) and (not isAtAuctionHouse) and (not isMailing)) then
+    if ((not isFalling) and (not isStealth) and (not isAFK) and (not isCombatLockdown) and (not isPetSummoned or DFM_WaitingPetRequest) and (not isFlying) and (not isOnTaxi) and (not isDeadOrGhost) and (not isCasting)) then
         DFM_SummonPet()
     elseif (isStealth and isPetSummoned) then
         DFM_RevokePet()
@@ -252,12 +256,17 @@ local function DFM_CheckStates()
 end
 
 -- METHOD : Update falling state
-local function OnUpdate(self, elapsed)
+local function OnUpdate()
     DFM_CheckStates()
 end
 
 -- METHOD : Sync pet over GUILD, PARTY, or RAID
 local function DFM_SyncPet(channel)
+    if (DFM_Settings.DFM_Setting_SyncPet == false) then
+        DEFAULT_CHAT_FRAME:AddMessage(string.format(DFM_Locale["ERROR_SYNC_NOT_ENABLED"], DFM_Title))
+        return
+    end
+
     local petID = C_PetJournal.GetSummonedPetGUID()     -- If pet is currently summoned    
     
     -- Check if parameter channel is correct
@@ -298,7 +307,11 @@ local function DFM_SyncPet(channel)
 
     -- Convert PetGUID to pet name
     local speciesId = C_PetJournal.GetPetInfoByPetID(petID)
-    C_ChatInfo.SendAddonMessage(DFM_Prefix, speciesId, channel)
+
+    if (speciesId) then
+        C_ChatInfo.SendAddonMessage(DFM_Prefix, speciesId, channel)
+        DEFAULT_CHAT_FRAME:AddMessage(string.format(DFM_Locale["SYNC_REQUEST_FEEDBACK"], DFM_Title))
+    end
 end
 
 -- METHOD : Get full player name with server
@@ -316,7 +329,7 @@ end
 local function DFM_HandleSyncMessage(prefix, sender, speciesId)
     if (prefix == DFM_Prefix and sender ~= GetFullPlayerName() and speciesId ~= nil) then
         -- Handle the synchronization request here     
-        if (DFM_Settings.DFM_SyncPet) then
+        if (DFM_Settings.DFM_Setting_SyncPet) then
             speciesIdNum = tonumber(speciesId)
             local petName = GetPetNameFromSpeciesID(speciesIdNum)
             DEFAULT_CHAT_FRAME:AddMessage(string.format(DFM_Locale["SYNC_REQUEST_RECEIVED"], DFM_Title, sender, petName))
@@ -346,40 +359,16 @@ end
 f:RegisterEvent("PLAYER_LOGIN")
 f:RegisterEvent("COMPANION_UPDATE")
 f:RegisterEvent("CHAT_MSG_ADDON")
-f:RegisterEvent("CINEMATIC_START")
-f:RegisterEvent("CINEMATIC_STOP")
-f:RegisterEvent("MERCHANT_SHOW")
-f:RegisterEvent("MERCHANT_CLOSED")
-f:RegisterEvent("AUCTION_HOUSE_SHOW")
-f:RegisterEvent("AUCTION_HOUSE_CLOSED")
-f:RegisterEvent("MAIL_SHOW")
-f:RegisterEvent("MAIL_CLOSED")
 
 -- Manage events
 f:SetScript("OnEvent", function(self, event, prefix, message, channel, sender)
     if (event == "PLAYER_LOGIN") then
         DFM_OnLoad()
         DFM_UpdatePetLists()
-    elseif (event == "COMPANION_UPDATE") then
-        DFM_UpdatePetLists()
+    --elseif (event == "COMPANION_UPDATE") then
+        --DFM_UpdatePetLists()
     elseif (event == "CHAT_MSG_ADDON") then
         DFM_HandleSyncMessage(prefix, sender, message)
-    elseif (event == "CINEMATIC_START") then
-        isInCinematic = true
-    elseif (event == "CINEMATIC_STOP") then
-        isInCinematic = false
-    elseif (event == "MERCHANT_SHOW") then
-        isAtMerchant = true
-    elseif (event == "MERCHANT_CLOSED") then
-        isAtMerchant = false
-    elseif (event == "AUCTION_HOUSE_SHOW") then
-        isAtAuctionHouse = true
-    elseif (event == "AUCTION_HOUSE_CLOSED") then
-        isAtAuctionHouse = false
-    elseif (event == "MAIL_SHOW") then
-        isMailing = true
-    elseif (event == "MAIL_CLOSED") then
-        isMailing = false
     end
 end)
 
