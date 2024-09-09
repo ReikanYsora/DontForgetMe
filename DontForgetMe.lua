@@ -1,10 +1,15 @@
+-- Addon infos
 local DFM_Lang
 local DFM_Title
 local DFM_Author
 local DFM_Version
+
+-- Sync variables
 local DFM_Prefix = "DFM_SYNC"
 local DFM_WaitingPetRequest         -- Pet species ID in queue
 local DFM_SummoningInProgress       -- State for summoning (API request must be take 2 sec to return the good summoning value)
+local DFM_UpdatesPerSecond = 5      -- Update per second to check character states
+local DFM_LastUpdate = 0
 
 -- States
 local isStealth
@@ -17,10 +22,14 @@ local isOnTaxi
 local isDeadOrGhost
 local isCasting
 
--- Lists for favorite, non-favorite pets and owned pets
+-- Lists for favorites, non-favorites pets, owned pets and database references
 local DFM_FavoritePets = {}
 local DFM_NonFavoritePets = {}
 local DFM_OwnedPets = {}
+local DFM_KnownPetNames = {}
+local DFM_FavoritesWithDuplicatedCount = 0
+local DFM_NonFavoritesWithDuplicatedCount = 0
+local DFM_OwnedWithDuplicatedCount = 0
 
 -- Initialize saved settings table
 DFM_Settings = DFM_Settings or
@@ -36,6 +45,8 @@ function DFM_OnLoad()
     DFM_Title = C_AddOns.GetAddOnMetadata("DontForgetMe", "Title")
     DFM_Author = C_AddOns.GetAddOnMetadata("DontForgetMe", "Author")
     DFM_Version = C_AddOns.GetAddOnMetadata("DontForgetMe", "Version")
+
+    --Welcome message
     DEFAULT_CHAT_FRAME:AddMessage(string.format(DFM_Locale["WELCOME_MESSAGE"], DFM_Title, DFM_Version, DFM_Author))
 
     -- Register addon message prefix
@@ -49,12 +60,12 @@ function DFM_OnLoad()
 
     -- Add an icon next to the title
     local icon = panel:CreateTexture(nil, "ARTWORK")
-    icon:SetTexture("2341435") -- Change this to the texture path or ID you want
-    icon:SetSize(32, 32) -- Set the size of the icon
-    icon:SetPoint("TOPLEFT", 16, -16) -- Adjust the position of the icon
+    icon:SetTexture("2341435")
+    icon:SetSize(32, 32)
+    icon:SetPoint("TOPLEFT", 16, -16) 
 
     local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("LEFT", icon, "RIGHT", 8, 0) -- Position the title to the right of the icon
+    title:SetPoint("LEFT", icon, "RIGHT", 8, 0)
     title:SetText("|cff0066d1"..DFM_Title.."|r".." - ".. DFM_Version)
 
     local author = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -80,79 +91,156 @@ function DFM_OnLoad()
     end)
 end
 
+-- METHOD : Return count of entries in a dictionary
+local function DFM_DictionaryCount(dictionary)
+    if (not dictionary) then
+        return 0
+    end
+
+    local count = 0
+
+    for _ in pairs(dictionary) do
+        count = count + 1
+    end
+
+    return count
+end
+
 -- METHOD : Check if a pet (by species ID) is owned by the player
-function PetIsOwned(speciesID)
-    for _, tempSpeciesID in pairs(DFM_OwnedPets) do
-        if (tempSpeciesID == speciesID) then        
-            return true
+local function DFM_PetIsOwned(speciesID)
+    return DFM_OwnedPets[speciesID] ~= nil
+end
+
+-- METHOD : Get petName from speciesID
+local function DFM_GetPetNameFromSpeciesID(speciesID)
+    local tempSpeciesID, tempPetName
+
+    for tempSpeciesID, tempPetName in pairs(DFM_KnownPetNames) do
+        if (tempSpeciesID == speciesID) then
+            return tempPetName
         end
     end
-    return false
+
+    return nil
+end
+
+-- METHOD : Return a random SpeciesID from dictionnaries
+local function DFM_GetRandomSpeciesID(petDictionary)
+    local keys = {}
+    local key
+    
+    for key in pairs(petDictionary) do
+        table.insert(keys, key)
+    end
+    
+    if #keys == 0 then
+        return nil
+    end
+
+    local randomIndex = math.random(#keys)
+    local randomKey = keys[randomIndex]
+
+    return randomKey
+end
+
+-- METHOD : Get petGUID from speciesID
+local function DFM_GetPetGUIDFromSpeciesID(speciesID)
+    return DFM_OwnedPets[speciesID] or nil
+end
+
+-- METHOD : Get speciesID from petGUID
+local function DFM_GetSpeciesIDByPetGUID(petGUID)
+    local tempSpeciesID, tempPetGUID
+
+    for tempSpeciesID, tempPetGUID in pairs(DFM_OwnedPets) do
+        if (tempPetGUID == petGUID) then
+            return tempSpeciesID
+        end
+    end
+    return nil
+end
+
+-- METHOD : Get full player name with server
+local function DFM_GetFullPlayerName()
+    local name, server = UnitFullName("player")
+
+    if (server) then
+        return name .. "-" .. server
+    else
+        return name
+    end
+end
+
+-- METHOD : Return count of favorites pet, non favorites pet and owned pet
+local function DFM_CheckDifferences()
+    local favoritesCount = 0
+    local nonFavoritesCount = 0
+    local ownedCount = 0
+
+    local numPets, _ = C_PetJournal.GetNumPets()
+
+    for i = 1, numPets do
+        local petGUID, speciesID, owned, _, _, favorite, _, petName = C_PetJournal.GetPetInfoByIndex(i)
+
+        if (owned) then
+            ownedCount = ownedCount + 1
+            
+            if (favorite) then
+                favoritesCount = favoritesCount + 1
+            else
+                nonFavoritesCount = nonFavoritesCount + 1
+            end
+        end
+    end
+
+    return favoritesCount, nonFavoritesCount, ownedCount
 end
 
 -- METHOD : Update the favorite and non-favorite pet lists
-local function DFM_UpdatePetLists()
+local function DFM_UpdatePetDictionaries()   
+    local favoritesCount, nonFavoritesCount, ownedCount = DFM_CheckDifferences()
+
+    -- If update is not needed
+    if (DFM_FavoritesWithDuplicatedCount == favoritesCount and DFM_NonFavoritesWithDuplicatedCount == nonFavoritesCount and DFM_OwnedWithDuplicatedCount == ownedCount) then
+        return;
+    end
+
     -- Clear existing data
     wipe(DFM_FavoritePets)
     wipe(DFM_NonFavoritePets)
     wipe(DFM_OwnedPets)
-
-    local numPets, numOwned = C_PetJournal.GetNumPets()
+    wipe(DFM_KnownPetNames)
+    
+    local numPets, ownedPets = C_PetJournal.GetNumPets()
 
     for i = 1, numPets do
-        petID, speciesID, owned, _, _, favorite, _, petName = C_PetJournal.GetPetInfoByIndex(i)
-        
-        if (owned) then         
-            -- Update favorite and non-favorite pets as dictionaries
+        local petGUID, speciesID, owned, _, _, favorite, _, petName = C_PetJournal.GetPetInfoByIndex(i)
+
+        -- Update known pets name (speciesID => Pet name)
+        DFM_KnownPetNames[speciesID] = petName
+
+        if (owned) then            
+            DFM_OwnedWithDuplicatedCount = DFM_OwnedWithDuplicatedCount + 1
+
+            -- Update owned pets as dictionary (speciesID => petGUID)
+            DFM_OwnedPets[speciesID] = petGUID
+            
+            -- Update favorite and non-favorite pets as dictionaries (speciesID => petGUID)
             if (favorite) then
-                table.insert(DFM_FavoritePets, speciesID)                
+                DFM_FavoritesWithDuplicatedCount = DFM_FavoritesWithDuplicatedCount + 1
+                DFM_FavoritePets[speciesID] = petGUID
             else
-                table.insert(DFM_NonFavoritePets, speciesID)
+                DFM_NonFavoritesWithDuplicatedCount = DFM_NonFavoritesWithDuplicatedCount + 1
+                DFM_NonFavoritePets[speciesID] = petGUID
             end
-
-            -- Update owned pets as dictionary
-            table.insert(DFM_OwnedPets, speciesID)
         end
     end
-
-    print("DFM_FavoritePets : "..#DFM_FavoritePets)
-    print("DFM_NonFavoritePets : "..#DFM_NonFavoritePets)
-    print("DFM_OwnedPets : "..#DFM_OwnedPets)
-end
-
--- METHOD : Return pet name from speciesID
-local function GetPetNameFromSpeciesID(speciesID)
-    local numPets, numOwned = C_PetJournal.GetNumPets(false)
-
-    for i = 1, numPets do
-        _, tempSpeciesID, _, _, _, _, _, petName = C_PetJournal.GetPetInfoByIndex(i)
-
-        if (speciesID == tempSpeciesID) then
-            return petName
-        end        
-    end
-
-    return DFM_Locale["UNKNOWN_NAME"]
-end
-
--- METHOD : Get petGUID from speciesID
-local function GetPetGUIDBySpeciesID(speciesID)
-    local numPets = C_PetJournal.GetNumPets(false)
-
-    for i = 1, numPets do
-        local petID, petSpeciesID = C_PetJournal.GetPetInfoByIndex(i)
-
-        if petSpeciesID == speciesID then
-            return petID, petSpeciesID
-        end
-    end
-
-    -- Return nil if no petGUID was found
-    return nil
+    
+    DEFAULT_CHAT_FRAME:AddMessage(string.format(DFM_Locale["LIST_UPDATED"], DFM_Title))
 end
 
 -- CALLBACK : When summon is completed
-local function OnSummonedEnded()
+local function DFM_OnSummonedEnded()
     DFM_WaitingPetRequest = nil
     DFM_SummoningInProgress = false
 end
@@ -169,7 +257,7 @@ local function DFM_SummonPet()
     end
 
     -- If there are no pets in the list, do nothing
-    if (#tempPetList == 0) then
+    if (DFM_DictionaryCount(tempPetList) == 0) then
         return
     end
 
@@ -189,14 +277,14 @@ local function DFM_SummonPet()
         -- If a pet is summoned, check if pet are the same
         if (currentPetGUID) then
              -- Convert speciesID to petGUID
-            local currentSpeciesId, petGUID = GetPetGUIDBySpeciesID(currentPetGUID)
+            local currentSpeciesId = DFM_GetSpeciesIDByPetGUID(currentPetGUID)
 
             if (not currentSpeciesId) then
                 return
             end
 
             -- The request and current pet the same
-            if (currentSpeciesId == DFM_WaitingPetRequest) then           
+            if (currentSpeciesId == DFM_WaitingPetRequest) then  
                 DFM_WaitingPetRequest = nil
                 return
             end              
@@ -205,18 +293,17 @@ local function DFM_SummonPet()
 
     -- If pet is no in waiting request, get a random pet name from list
     if (not DFM_WaitingPetRequest) then
-        local randomIndex = math.random(1, #tempPetList)
-        speciesIdToSummon = tempPetList[randomIndex]
+        speciesIdToSummon = DFM_GetRandomSpeciesID(tempPetList)
     else
-        speciesIdToSummon = DFM_WaitingPetRequest
+        speciesIdToSummon = DFM_WaitingPetRequest 
     end
 
-    local petGUID = GetPetGUIDBySpeciesID(speciesIdToSummon)
+    local petGUID = DFM_GetPetGUIDFromSpeciesID(speciesIdToSummon)
 
     if (petGUID) then
         C_PetJournal.SummonPetByGUID(petGUID)
         DFM_SummoningInProgress = true
-        C_Timer.After(2, OnSummonedEnded)
+        C_Timer.After(2, DFM_OnSummonedEnded)
     end
 end
 
@@ -226,7 +313,7 @@ local function DFM_RevokePet()
     local isPetSummoned = C_PetJournal.GetSummonedPetGUID()
 
     if (isPetSummoned) then
-        C_PetJournal.SummonPetByGUID(C_PetJournal.GetSummonedPetGUID())
+        C_PetJournal.SummonPetByGUID(isPetSummoned)
     end    
 end
 
@@ -255,9 +342,33 @@ local function DFM_CheckStates()
     end
 end
 
+-- METHOD : Get filter text in the pet journal filter input text
+local function DFM_PetJournalHasSearchText()
+    if (PetJournal and PetJournal:IsShown()) then
+        local searchBox = PetJournalSearchBox
+
+        if (searchBox) then
+            if (searchBox:GetText() == "") then
+                return false
+            else
+                return true
+            end
+        else
+            return false
+        end
+    end
+
+    return false
+end
+
 -- METHOD : Update falling state
-local function OnUpdate()
-    DFM_CheckStates()
+local function OnUpdate(self, elapsed)
+    DFM_LastUpdate = DFM_LastUpdate + elapsed
+
+    if (DFM_LastUpdate >= DFM_UpdatesPerSecond) then
+        DFM_CheckStates()
+        DFM_LastUpdate = 0
+    end
 end
 
 -- METHOD : Sync pet over GUILD, PARTY, or RAID
@@ -305,41 +416,39 @@ local function DFM_SyncPet(channel)
         return
     end
 
-    -- Convert PetGUID to pet name
-    local speciesId = C_PetJournal.GetPetInfoByPetID(petID)
+    -- Convert PetGUID to speciesID
+    local speciesID = DFM_GetSpeciesIDByPetGUID(petID)
 
-    if (speciesId) then
-        C_ChatInfo.SendAddonMessage(DFM_Prefix, speciesId, channel)
-        DEFAULT_CHAT_FRAME:AddMessage(string.format(DFM_Locale["SYNC_REQUEST_FEEDBACK"], DFM_Title))
-    end
-end
-
--- METHOD : Get full player name with server
-local function GetFullPlayerName()
-    local name, server = UnitFullName("player")
-
-    if (server) then
-        return name .. "-" .. server
+    if (speciesID) then
+        C_ChatInfo.SendAddonMessage(DFM_Prefix, speciesID, channel)
+        local petName = DFM_GetPetNameFromSpeciesID(speciesID)
+        DEFAULT_CHAT_FRAME:AddMessage(string.format(DFM_Locale["SYNC_REQUEST_FEEDBACK"], DFM_Title, petName))
     else
-        return name
+        --ERREUR : SpeciesID non trouvé à gerer
     end
 end
 
 -- METHOD : Handle received synchronization messages
 local function DFM_HandleSyncMessage(prefix, sender, speciesId)
-    if (prefix == DFM_Prefix and sender ~= GetFullPlayerName() and speciesId ~= nil) then
+    if (prefix == DFM_Prefix and sender ~= DFM_GetFullPlayerName() and speciesId ~= nil) then
         -- Handle the synchronization request here     
         if (DFM_Settings.DFM_Setting_SyncPet) then
             speciesIdNum = tonumber(speciesId)
-            local petName = GetPetNameFromSpeciesID(speciesIdNum)
-            DEFAULT_CHAT_FRAME:AddMessage(string.format(DFM_Locale["SYNC_REQUEST_RECEIVED"], DFM_Title, sender, petName))
 
-            -- Check if player owned this pet (with his name)
-            if (PetIsOwned(speciesIdNum) == true) then
-                DFM_WaitingPetRequest = speciesIdNum
-            else
-                DoEmote("cry")
-            end
+            if (speciesIdNum) then
+                local petName = DFM_GetPetNameFromSpeciesID(speciesIdNum)
+
+                if (petName) then
+                    DEFAULT_CHAT_FRAME:AddMessage(string.format(DFM_Locale["SYNC_REQUEST_RECEIVED"], DFM_Title, sender, petName))
+
+                    -- Check if player owned this pet (with his name)
+                    if (DFM_PetIsOwned(speciesIdNum) == true) then
+                        DFM_WaitingPetRequest = speciesIdNum
+                    else
+                        DoEmote("cry")
+                    end
+                end                
+            end           
         end
     end
 end
@@ -350,23 +459,24 @@ local f = CreateFrame("Frame")
 -- Register commands
 SLASH_DFMSYNC1 = "/DFM_sync"
 SlashCmdList["DFMSYNC"] = function(msg)
-    -- Trim leading and trailing whitespace
     local param = strtrim(msg):upper()
     DFM_SyncPet(param)
 end
 
 -- Register events
 f:RegisterEvent("PLAYER_LOGIN")
-f:RegisterEvent("COMPANION_UPDATE")
+f:RegisterEvent("PET_JOURNAL_LIST_UPDATE")
 f:RegisterEvent("CHAT_MSG_ADDON")
 
 -- Manage events
 f:SetScript("OnEvent", function(self, event, prefix, message, channel, sender)
     if (event == "PLAYER_LOGIN") then
         DFM_OnLoad()
-        DFM_UpdatePetLists()
-    --elseif (event == "COMPANION_UPDATE") then
-        --DFM_UpdatePetLists()
+    elseif (event == "PET_JOURNAL_LIST_UPDATE") then
+        -- Only if text is empty in pet journal search filter bar
+        if (DFM_PetJournalHasSearchText() == false) then
+            DFM_UpdatePetDictionaries()
+        end
     elseif (event == "CHAT_MSG_ADDON") then
         DFM_HandleSyncMessage(prefix, sender, message)
     end

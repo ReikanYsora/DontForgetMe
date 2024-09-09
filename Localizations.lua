@@ -14,15 +14,16 @@
 	["ERROR_SYNC_NOT_IN_GROUP"]						= "|cff0066d1%s|r : You need to join a party before using this command",
 	["ERROR_SYNC_NOT_IN_RAID"]						= "|cff0066d1%s|r : You need to join a raid before using this command",
 	["SYNC_REQUEST_RECEIVED"]						= "|cff0066d1%s|r : %s wants you to summon %s !",
-	["SYNC_REQUEST_FEEDBACK"]						= "|cff0066d1%s|r : %s Sync request sended !",
-	["UNKNOWN_NAME"]								= "an unknown pet... Perhaps it's gone on in vacation ?"
+	["SYNC_REQUEST_FEEDBACK"]						= "|cff0066d1%s|r : You send a sync request for summon %s !",
+	["UNKNOWN_NAME"]								= "an unknown pet... Perhaps it's gone on in vacation ?",
+	["LIST_UPDATED"]								= "|cff0066d1%s|r : Pet list updated !"
 };
 
 -- METHOD : Initialize locales
 function DFM_InitializeLocales()
 	local DFM_Lang = GetLocale();
 
-	if DFM_Lang == "frFR" then
+	if (DFM_Lang == "frFR") then
 		DFM_Locale.WELCOME_MESSAGE									= "|cff0066d1%s|r - |cffeb7800%s|r par %s"
 		DFM_Locale.BY												= "par %s"
 		DFM_Locale.SETTINGS_FAVORITE_ONLY							= "Invocation des mascottes favorites uniquement"
@@ -37,7 +38,8 @@ function DFM_InitializeLocales()
 		DFM_Locale.ERROR_SYNC_NOT_IN_GROUP							= "|cff0066d1%s|r : Vous devez rejoindre un groupe avant d'utiliser cette commande"
 		DFM_Locale.ERROR_SYNC_NOT_IN_RAID							= "|cff0066d1%s|r : Vous devez rejoindre un groupe de raid avant d'utiliser cette commande"
 		DFM_Locale.SYNC_REQUEST_RECEIVED							= "|cff0066d1%s|r : %s veut que tu invoques %s !"
-		DFM_Locale.SYNC_REQUEST_FEEDBACK							= "|cff0066d1%s|r : %s Requête envoyée !"
+		DFM_Locale.SYNC_REQUEST_FEEDBACK							= "|cff0066d1%s|r : Requête envoyée pour invoquer %s !"
 		DFM_Locale.UNKNOWN_NAME										= "une mascotte inconnue... Peut-être est-elle partie en voyage ?"
+		DFM_Locale.LIST_UPDATED										= "|cff0066d1%s|r : Liste de mascottes mise à jour !"
 	end
 end
