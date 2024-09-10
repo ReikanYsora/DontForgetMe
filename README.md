@@ -1,6 +1,6 @@
-Don't forget me ! 
-
 <img src="./DontForgetMe_Icon.png" alt="Don't forget me !" width="200"/>
+<p style="font-size:20px;">Don't forget me ! </p>
+<p style="font-size:10px;">by Reikan</p>
 
 **Automatically summon a battle pet (favorite or not). Sync your pet with GUILD, PARTY or RAID !**
 Don't leave your companions behind !
