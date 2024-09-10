@@ -1,10 +1,15 @@
 ## Interface: 110000, 110002, 110005
 ## Title: DontForgetMe!
 ## Notes: Don't leave your companions behind!
+## Notes-frFR: Ne laissez plus vos mascottes derrière vous !
+## Notes-deDE: Lass deine Begleiter nicht im Stich!
+## Notes-esES: ¡No dejes atrás a tus compañeros!
+## Notes-esMX: ¡No dejes atrás a tus compañeros!
+## Notes-itIT: Non lasciare indietro i tuoi compagni!
+## Notes-ptBR: Não deixe seus companheiros para trás!
 ## Author: |cff915b25Reikan / Naxxramas|r - |cff4dd2ffReikan#2302|r
-## Version: 1.1.0
+## Version: 1.1.1
 ## IconTexture: 2341435
 ## SavedVariables: DFM_Settings
 Localizations.lua
 DontForgetMe.lua
-DontForgetMe.xml

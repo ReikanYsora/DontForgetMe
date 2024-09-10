@@ -1,58 +1,50 @@
+----------------------------------------------
+--          DontForgetMe! Version 1.1.1 
+--              By Reikan (09/10/24)
+----------------------------------------------
+
 -- Addon infos
-local DFM_Lang
-local DFM_Title
-local DFM_Author
-local DFM_Version
+local DFM_Title                                     -- Addon Title
+local DFM_Author                                    -- Addon Author
+local DFM_Version                                   -- Addon Version
 
 -- Sync variables
-local DFM_Prefix = "DFM_SYNC"
-local DFM_WaitingPetRequest         -- Pet species ID in queue
-local DFM_SummoningInProgress       -- State for summoning (API request must be take 2 sec to return the good summoning value)
-local DFM_UpdatesPerSecond = 5      -- Update per second to check character states
-local DFM_LastUpdate = 0
+local DFM_Prefix = "DFM_SYNC"                       -- Prefix for CHAT_MSG_ADDON
+local DFM_WaitingPetRequest                         -- Pet species ID in queue
+local DFM_SummoningInProgress                       -- State for summoning (API request must be take 2 sec to return the good summoning value)
+local DFM_TimeBeforeUpdate = 2                      -- Time before update player status (default : update every 2 seconds)
+local DFM_TimeBeforeUpdateTemp = 0                  -- Temp time to calculate update status check
 
 -- States
-local isStealth
-local isAFK
-local isFalling
-local isCombatLockdown
-local isPetSummoned
-local isFlying
-local isOnTaxi
-local isDeadOrGhost
-local isCasting
+local isStealth                                     -- Player state : is player in stealth mode ?
+local isAFK                                         -- Player state : is player AFK ?
+local isFalling                                     -- Player state : is player is falling ?
+local isCombatLockdown                              -- Player state : is player in combat mode ?
+local isPetSummoned                                 -- Player state : is pet is summoned ?
+local isFlying                                      -- Player state : is player is flying ?
+local isOnTaxi                                      -- Player state : is player on taxi ?
+local isDeadOrGhost                                 -- Player state : is player is dead or ghost ?
+local isCasting                                     -- Player state : is player is casting ?
 
 -- Lists for favorites, non-favorites pets, owned pets and database references
 local DFM_FavoritePets = {}
 local DFM_NonFavoritePets = {}
 local DFM_OwnedPets = {}
 local DFM_KnownPetNames = {}
-local DFM_FavoritesWithDuplicatedCount = 0
-local DFM_NonFavoritesWithDuplicatedCount = 0
-local DFM_OwnedWithDuplicatedCount = 0
+local DFM_FavoritesWithDuplicatedCount = 0          -- Favorites pet count (more efficiant than a loop on the dictionary)
+local DFM_NonFavoritesWithDuplicatedCount = 0       -- Non-favorites pet count (more efficiant than a loop on the dictionary)
+local DFM_OwnedWithDuplicatedCount = 0              -- Owned pet count (more efficiant than a loop on the dictionary)
 
 -- Initialize saved settings table
+local InterfaceOptionsFramePanelContainer           -- Setting panel
 DFM_Settings = DFM_Settings or
 {
     DFM_Setting_FavoriteOnly = true,
     DFM_Setting_SyncPet = true
 }
 
---- METHOD : On Load - Display Addon name and version
-function DFM_OnLoad()
-    DFM_InitializeLocales()
-
-    DFM_Title = C_AddOns.GetAddOnMetadata("DontForgetMe", "Title")
-    DFM_Author = C_AddOns.GetAddOnMetadata("DontForgetMe", "Author")
-    DFM_Version = C_AddOns.GetAddOnMetadata("DontForgetMe", "Version")
-
-    --Welcome message
-    DEFAULT_CHAT_FRAME:AddMessage(string.format(DFM_Locale["WELCOME_MESSAGE"], DFM_Title, DFM_Version, DFM_Author))
-
-    -- Register addon message prefix
-    C_ChatInfo.RegisterAddonMessagePrefix(DFM_Prefix)
-
-   -- Create option panel
+--- METHOD : Create settings panel
+local function DFM_CreateSettingsPanel()
     local panel = CreateFrame("Frame", nil, InterfaceOptionsFramePanelContainer)
     panel.name = "Don't Forget Me!"
     local category = Settings.RegisterCanvasLayoutCategory(panel, panel.name)
@@ -71,7 +63,7 @@ function DFM_OnLoad()
     local author = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     author:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
     author:SetText(string.format(DFM_Locale["BY"], DFM_Author))
-    
+
     -- Favorite only check option
     local checkboxFavoriteOnly = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
     checkboxFavoriteOnly:SetPoint("TOPLEFT", author, "BOTTOMLEFT", 0, -10)
@@ -80,7 +72,7 @@ function DFM_OnLoad()
     checkboxFavoriteOnly:SetScript("OnClick", function(self)
         DFM_Settings.DFM_Setting_FavoriteOnly = self:GetChecked()
     end)
-    
+
     -- Sync over GUILD, PARTY or RAID check option
     local checkboxSyncPet = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
     checkboxSyncPet:SetPoint("TOPLEFT", checkboxFavoriteOnly, "BOTTOMLEFT", 0, 0)
@@ -89,6 +81,25 @@ function DFM_OnLoad()
     checkboxSyncPet:SetScript("OnClick", function(self)
         DFM_Settings.DFM_Setting_SyncPet = self:GetChecked()
     end)
+end
+
+--- METHOD : On Load - Display Addon name and version
+local function DFM_OnLoad()
+    DFM_InitializeLocales()
+
+    DFM_Title = C_AddOns.GetAddOnMetadata("DontForgetMe", "Title")
+    DFM_Author = C_AddOns.GetAddOnMetadata("DontForgetMe", "Author")
+    DFM_Version = C_AddOns.GetAddOnMetadata("DontForgetMe", "Version")
+
+    -- Create settings panel
+    DFM_CreateSettingsPanel()
+
+    --Welcome message
+    DEFAULT_CHAT_FRAME:AddMessage(string.format(DFM_Locale["WELCOME_MESSAGE"], DFM_Title, DFM_Version, DFM_Author))
+
+    -- Register addon message prefix
+    C_ChatInfo.RegisterAddonMessagePrefix(DFM_Prefix)
+
 end
 
 -- METHOD : Return count of entries in a dictionary
@@ -128,11 +139,11 @@ end
 local function DFM_GetRandomSpeciesID(petDictionary)
     local keys = {}
     local key
-    
+
     for key in pairs(petDictionary) do
         table.insert(keys, key)
     end
-    
+
     if #keys == 0 then
         return nil
     end
@@ -180,11 +191,11 @@ local function DFM_CheckDifferences()
     local numPets, _ = C_PetJournal.GetNumPets()
 
     for i = 1, numPets do
-        local petGUID, speciesID, owned, _, _, favorite, _, petName = C_PetJournal.GetPetInfoByIndex(i)
+        local _, _, owned, _, _, favorite = C_PetJournal.GetPetInfoByIndex(i)
 
         if (owned) then
             ownedCount = ownedCount + 1
-            
+
             if (favorite) then
                 favoritesCount = favoritesCount + 1
             else
@@ -197,11 +208,11 @@ local function DFM_CheckDifferences()
 end
 
 -- METHOD : Update the favorite and non-favorite pet lists
-local function DFM_UpdatePetDictionaries()   
+local function DFM_UpdatePetDictionaries(forceUpdate)
     local favoritesCount, nonFavoritesCount, ownedCount = DFM_CheckDifferences()
 
     -- If update is not needed
-    if (DFM_FavoritesWithDuplicatedCount == favoritesCount and DFM_NonFavoritesWithDuplicatedCount == nonFavoritesCount and DFM_OwnedWithDuplicatedCount == ownedCount) then
+    if (DFM_FavoritesWithDuplicatedCount == favoritesCount and DFM_NonFavoritesWithDuplicatedCount == nonFavoritesCount and DFM_OwnedWithDuplicatedCount == ownedCount and not forceUpdate) then
         return;
     end
 
@@ -268,6 +279,7 @@ local function DFM_SummonPet()
 
     -- Check if pet is summoned
     local currentPetGUID = C_PetJournal.GetSummonedPetGUID()
+    local speciesIdToSummon
 
     -- If a pet is summoned and no query in queue, do nothing
     if (currentPetGUID and not DFM_WaitingPetRequest) then
@@ -361,13 +373,13 @@ local function DFM_PetJournalHasSearchText()
     return false
 end
 
--- METHOD : Update falling state
+-- METHOD : Update player states
 local function OnUpdate(self, elapsed)
-    DFM_LastUpdate = DFM_LastUpdate + elapsed
+    DFM_TimeBeforeUpdateTemp = DFM_TimeBeforeUpdateTemp + elapsed
 
-    if (DFM_LastUpdate >= DFM_UpdatesPerSecond) then
+    if (DFM_TimeBeforeUpdateTemp >= DFM_TimeBeforeUpdate) then
         DFM_CheckStates()
-        DFM_LastUpdate = 0
+        DFM_TimeBeforeUpdateTemp = 0
     end
 end
 
@@ -378,7 +390,7 @@ local function DFM_SyncPet(channel)
         return
     end
 
-    local petID = C_PetJournal.GetSummonedPetGUID()     -- If pet is currently summoned    
+    local summonedPetGUID = C_PetJournal.GetSummonedPetGUID()
     
     -- Check if parameter channel is correct
     if ((channel ~= "GUILD") and (channel ~= "PARTY") and (channel ~= "RAID")) then
@@ -387,7 +399,7 @@ local function DFM_SyncPet(channel)
     end
 
     -- Check if player has pet summoned before sync
-    if (not petID) then
+    if (not summonedPetGUID) then
         if (channel == "GUILD") then
             DEFAULT_CHAT_FRAME:AddMessage(string.format(DFM_Locale["ERROR_SYNC_NOT_SUMMONED_PET_GUILD"], DFM_Title))
         elseif (channel == "PARTY") then
@@ -417,14 +429,12 @@ local function DFM_SyncPet(channel)
     end
 
     -- Convert PetGUID to speciesID
-    local speciesID = DFM_GetSpeciesIDByPetGUID(petID)
+    local speciesID = DFM_GetSpeciesIDByPetGUID(summonedPetGUID)
 
     if (speciesID) then
         C_ChatInfo.SendAddonMessage(DFM_Prefix, speciesID, channel)
         local petName = DFM_GetPetNameFromSpeciesID(speciesID)
         DEFAULT_CHAT_FRAME:AddMessage(string.format(DFM_Locale["SYNC_REQUEST_FEEDBACK"], DFM_Title, petName))
-    else
-        --ERREUR : SpeciesID non trouvé à gerer
     end
 end
 
@@ -433,7 +443,7 @@ local function DFM_HandleSyncMessage(prefix, sender, speciesId)
     if (prefix == DFM_Prefix and sender ~= DFM_GetFullPlayerName() and speciesId ~= nil) then
         -- Handle the synchronization request here     
         if (DFM_Settings.DFM_Setting_SyncPet) then
-            speciesIdNum = tonumber(speciesId)
+            local speciesIdNum = tonumber(speciesId)
 
             if (speciesIdNum) then
                 local petName = DFM_GetPetNameFromSpeciesID(speciesIdNum)
@@ -445,7 +455,7 @@ local function DFM_HandleSyncMessage(prefix, sender, speciesId)
                     if (DFM_PetIsOwned(speciesIdNum) == true) then
                         DFM_WaitingPetRequest = speciesIdNum
                     else
-                        DoEmote("cry")
+                        DoEmote("CRY")
                     end
                 end                
             end           
@@ -453,15 +463,34 @@ local function DFM_HandleSyncMessage(prefix, sender, speciesId)
     end
 end
 
+-- Fonction pour gÃ©rer les commandes de base
+local function DFM_CommandHandler(msg)
+    local command, param = strsplit(" ", msg, 2)
+    command = strtrim(command):upper()
+
+    if (command == "SYNC") then
+        param = strtrim(param):upper()
+
+        if (param) then
+            DFM_SyncPet(param)
+        else
+            DEFAULT_CHAT_FRAME:AddMessage(string.format(DFM_Locale["ERROR_CMD_PARAM_MISSING"], DFM_Title))
+        end
+    elseif (command == "UPDATE") then
+        DFM_UpdatePetDictionaries(true)
+    elseif (command == "HELP") then
+        DEFAULT_CHAT_FRAME:AddMessage(string.format(DFM_Locale["HELP"], DFM_Title))
+    else
+        DEFAULT_CHAT_FRAME:AddMessage(string.format(DFM_Locale["UNKWOWN_COMMAND"], DFM_Title))
+    end
+end
+
 -- Create frame for events
 local f = CreateFrame("Frame")
 
 -- Register commands
-SLASH_DFMSYNC1 = "/DFM_sync"
-SlashCmdList["DFMSYNC"] = function(msg)
-    local param = strtrim(msg):upper()
-    DFM_SyncPet(param)
-end
+SLASH_DFM1 = "/dfm"
+SlashCmdList["DFM"] = DFM_CommandHandler
 
 -- Register events
 f:RegisterEvent("PLAYER_LOGIN")
@@ -475,7 +504,7 @@ f:SetScript("OnEvent", function(self, event, prefix, message, channel, sender)
     elseif (event == "PET_JOURNAL_LIST_UPDATE") then
         -- Only if text is empty in pet journal search filter bar
         if (DFM_PetJournalHasSearchText() == false) then
-            DFM_UpdatePetDictionaries()
+            DFM_UpdatePetDictionaries(false)
         end
     elseif (event == "CHAT_MSG_ADDON") then
         DFM_HandleSyncMessage(prefix, sender, message)

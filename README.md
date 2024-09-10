@@ -6,6 +6,14 @@ Don't forget me ! by Reikan
 Don't leave your companions behind !
 
 _________________________________________________________
+**Version 1.1.1 (110005_1_1_1) :**
+
+- Full command rework (/dfm to show them in game)
+- Added translation for deDE, itIT, esES, esMX and ptBR
+- Change update time for better performances
+- Clean code & remove all useless methods
+
+_________________________________________________________
 **Version 1.1.0 (110005_1_1_0) :**
 - New core to avoid blocked actions
 - Added the ability to synchronise your pet with your guild, group or raid using the command: /dfm_sync guild, raid or party
