@@ -8,7 +8,7 @@ Don't leave your companions behind !
 _________________________________________________________
 **Version 1.1.1 (110005_1_1_1) :**
 
-- Full command rework (/dfm to show them in game)
+- Full command rework (/dfm to show those in game)
 - Added translation for deDE, itIT, esES, esMX and ptBR
 - Change update time for better performances
 - Clean code & remove all useless methods
