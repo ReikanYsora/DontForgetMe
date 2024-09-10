@@ -1,6 +1,6 @@
 Don't forget me ! 
 
-![Description de l'image](./DontForgetMe_Icon.png)
+<img src="./DontForgetMe_Icon.png" alt="Don't forget me !" width="200"/>
 
 **Automatically summon a battle pet (favorite or not). Sync your pet with GUILD, PARTY or RAID !**
 Don't leave your companions behind !
